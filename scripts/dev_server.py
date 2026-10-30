@@ -11,12 +11,19 @@ from moto import mock_aws
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "api"))
 os.environ.setdefault("AWS_DEFAULT_REGION", "eu-west-2")
 os.environ.setdefault("TABLE_NAME", "local-applications")
+os.environ.setdefault("DEV_USER_ID", "local-dev")
 
 with mock_aws():
     boto3.client("dynamodb").create_table(
         TableName=os.environ["TABLE_NAME"],
-        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
-        AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
+        KeySchema=[
+            {"AttributeName": "user_id", "KeyType": "HASH"},
+            {"AttributeName": "id", "KeyType": "RANGE"},
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "user_id", "AttributeType": "S"},
+            {"AttributeName": "id", "AttributeType": "S"},
+        ],
         BillingMode="PAY_PER_REQUEST",
     )
     from app.main import app

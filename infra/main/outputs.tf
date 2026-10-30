@@ -13,3 +13,7 @@ output "frontend_bucket" {
 output "cloudfront_distribution_id" {
   value = aws_cloudfront_distribution.frontend.id
 }
+
+output "cognito_client_id" {
+  value = aws_cognito_user_pool_client.web.id
+}

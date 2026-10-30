@@ -2,7 +2,15 @@
 resource "aws_dynamodb_table" "applications" {
   name         = "${var.project}-applications"
   billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "id"
+
+  # one partition per user, so a query only ever sees that user's items
+  hash_key  = "user_id"
+  range_key = "id"
+
+  attribute {
+    name = "user_id"
+    type = "S"
+  }
 
   attribute {
     name = "id"

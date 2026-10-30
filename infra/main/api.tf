@@ -20,7 +20,7 @@ data "aws_iam_policy_document" "api" {
       "dynamodb:GetItem",
       "dynamodb:PutItem",
       "dynamodb:DeleteItem",
-      "dynamodb:Scan",
+      "dynamodb:Query",
     ]
     resources = [aws_dynamodb_table.applications.arn]
   }
@@ -68,6 +68,29 @@ resource "aws_lambda_function" "api" {
 resource "aws_apigatewayv2_api" "api" {
   name          = "${var.project}-api"
   protocol_type = "HTTP"
+
+  # apigw answers the browser's OPTIONS preflight itself - it has no token,
+  # so it'd get blocked by the authorizer if it went through to lambda
+  cors_configuration {
+    allow_origins = ["https://${aws_cloudfront_distribution.frontend.domain_name}"]
+    allow_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    allow_headers = ["authorization", "content-type"]
+    max_age       = 3600
+  }
+}
+
+# checks the cognito token on every request before lambda runs.
+# bad/missing/expired token = 401 straight from apigw, lambda never invoked
+resource "aws_apigatewayv2_authorizer" "cognito" {
+  api_id           = aws_apigatewayv2_api.api.id
+  name             = "cognito"
+  authorizer_type  = "JWT"
+  identity_sources = ["$request.header.Authorization"]
+
+  jwt_configuration {
+    issuer   = "https://${aws_cognito_user_pool.users.endpoint}"
+    audience = [aws_cognito_user_pool_client.web.id]
+  }
 }
 
 resource "aws_apigatewayv2_integration" "lambda" {
@@ -78,8 +101,17 @@ resource "aws_apigatewayv2_integration" "lambda" {
 }
 
 resource "aws_apigatewayv2_route" "proxy" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "$default"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# health check stays public for the smoke test
+resource "aws_apigatewayv2_route" "health" {
   api_id    = aws_apigatewayv2_api.api.id
-  route_key = "$default"
+  route_key = "GET /health"
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 }
 
@@ -93,7 +125,7 @@ resource "aws_apigatewayv2_stage" "default" {
   name        = "$default"
   auto_deploy = true
 
-  # no auth yet so at least rate limit it
+  # rate limit on top of auth, stops anyone hammering it
   default_route_settings {
     throttling_rate_limit  = 10
     throttling_burst_limit = 20

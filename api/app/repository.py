@@ -5,6 +5,7 @@ import uuid
 from datetime import UTC, datetime
 
 import boto3
+from boto3.dynamodb.conditions import Key
 
 from app.models import Application, ApplicationIn
 
@@ -18,38 +19,47 @@ class ApplicationRepository:
         table_name = table_name or os.environ["TABLE_NAME"]
         self.table = boto3.resource("dynamodb").Table(table_name)
 
-    def list(self) -> list[Application]:
-        # scan is fine for one user. if this ever had multiple users -> pk on user id + query
+    # table key is (user_id, id) so every call is scoped to one user -
+    # you can't read or touch someone else's items even with their id
+
+    def list(self, user_id: str) -> list[Application]:
         items = []
-        response = self.table.scan()
-        items.extend(response["Items"])
-        while "LastEvaluatedKey" in response:
-            response = self.table.scan(ExclusiveStartKey=response["LastEvaluatedKey"])
+        kwargs = {"KeyConditionExpression": Key("user_id").eq(user_id)}
+        while True:
+            response = self.table.query(**kwargs)
             items.extend(response["Items"])
+            if "LastEvaluatedKey" not in response:
+                break
+            kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
         apps = [Application(**item) for item in items]
         return sorted(apps, key=lambda a: a.applied_on, reverse=True)
 
-    def get(self, app_id: str) -> Application | None:
-        item = self.table.get_item(Key={"id": app_id}).get("Item")
+    def get(self, user_id: str, app_id: str) -> Application | None:
+        item = self.table.get_item(Key={"user_id": user_id, "id": app_id}).get("Item")
         return Application(**item) if item else None
 
-    def create(self, data: ApplicationIn) -> Application:
+    def create(self, user_id: str, data: ApplicationIn) -> Application:
         now = _now()
         app = Application(id=str(uuid.uuid4()), created_at=now, updated_at=now, **data.model_dump())
-        self.table.put_item(Item=app.model_dump(mode="json"))
+        self._put(user_id, app)
         return app
 
-    def replace(self, app_id: str, data: ApplicationIn) -> Application | None:
-        existing = self.get(app_id)
+    def replace(self, user_id: str, app_id: str, data: ApplicationIn) -> Application | None:
+        existing = self.get(user_id, app_id)
         if existing is None:
             return None
         app = Application(
             id=app_id, created_at=existing.created_at, updated_at=_now(), **data.model_dump()
         )
-        self.table.put_item(Item=app.model_dump(mode="json"))
+        self._put(user_id, app)
         return app
 
-    def delete(self, app_id: str) -> bool:
-        response = self.table.delete_item(Key={"id": app_id}, ReturnValues="ALL_OLD")
+    def delete(self, user_id: str, app_id: str) -> bool:
+        response = self.table.delete_item(
+            Key={"user_id": user_id, "id": app_id}, ReturnValues="ALL_OLD"
+        )
         # .get not "in" - some versions hand back an empty dict for a missing item
         return bool(response.get("Attributes"))
+
+    def _put(self, user_id: str, app: Application) -> None:
+        self.table.put_item(Item={"user_id": user_id, **app.model_dump(mode="json")})

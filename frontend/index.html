@@ -8,11 +8,35 @@
 </head>
 <body>
   <header>
-    <h1>Job Application Tracker</h1>
+    <div class="title-row">
+      <h1>Job Application Tracker</h1>
+      <div id="account" class="account" hidden>
+        <span id="who" class="muted"></span>
+        <button type="button" id="logout-btn" class="secondary small">Log out</button>
+      </div>
+    </div>
     <p id="summary" class="muted"></p>
   </header>
 
-  <main>
+  <section id="auth" class="auth" hidden>
+    <form id="auth-form">
+      <h2 id="auth-title">Log in</h2>
+      <label>Email <input name="email" type="email" required autocomplete="username"></label>
+      <label id="password-field">Password
+        <input name="password" type="password" minlength="8" autocomplete="current-password">
+      </label>
+      <label id="code-field" hidden>Code from your email
+        <input name="code" inputmode="numeric" autocomplete="one-time-code">
+      </label>
+      <button type="submit" id="auth-submit">Log in</button>
+      <button type="button" id="auth-toggle" class="link">Need an account? Sign up</button>
+      <button type="button" id="resend-btn" class="link" hidden>Resend code</button>
+      <p id="auth-msg" class="muted"></p>
+      <p id="auth-error" class="error" role="alert"></p>
+    </form>
+  </section>
+
+  <main id="tracker" hidden>
     <form id="app-form">
       <input type="hidden" name="id">
       <label>Company <input name="company" required maxlength="100"></label>
@@ -46,6 +70,7 @@
   </main>
 
   <script src="config.js"></script>
+  <script src="auth.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

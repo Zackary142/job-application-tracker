@@ -7,8 +7,10 @@
   :root { --bg: #151517; --surface: #1f1f22; --text: #ececee; --muted: #9a9aa0; --border: #34343a; --accent: #6b93ff; }
 }
 * { box-sizing: border-box; }
+/* display:flex on labels etc beats the hidden attribute otherwise */
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--text); }
-header, main { max-width: 960px; margin: 0 auto; padding: 0 16px; }
+header, main, .auth { max-width: 960px; margin: 0 auto; padding: 0 16px; }
 header { padding-top: 32px; }
 h1 { margin: 0 0 4px; font-size: 1.6rem; }
 .muted { color: var(--muted); }
@@ -45,3 +47,9 @@ a { color: var(--accent); }
   tr { display: grid; grid-template-columns: 1fr 1fr; padding: 8px 0; border-bottom: 1px solid var(--border); }
   td { border: none; padding: 4px 12px; }
 }
+.title-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.account { display: flex; align-items: center; gap: 10px; font-size: 0.9rem; }
+.auth form { max-width: 380px; grid-template-columns: 1fr; }
+.auth h2 { margin: 0; font-size: 1.2rem; }
+.auth p { margin: 0; }
+button.link { background: none; border: none; color: var(--accent); padding: 0; text-align: left; }

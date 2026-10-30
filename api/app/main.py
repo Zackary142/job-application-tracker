@@ -2,7 +2,7 @@ import os
 from functools import lru_cache
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Response, status
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 
@@ -26,8 +26,21 @@ def get_repo() -> ApplicationRepository:
     return ApplicationRepository()
 
 
-# tests override get_repo with a moto table
+def get_user_id(request: Request) -> str:
+    # api gateway checks the cognito token before lambda even runs, then passes
+    # the claims through in the event. sub = the user's id in cognito
+    event = request.scope.get("aws.event")
+    if event:
+        return event["requestContext"]["authorizer"]["jwt"]["claims"]["sub"]
+    # running locally (dev_server.py) - no api gateway, so fake a user
+    if dev_user := os.environ.get("DEV_USER_ID"):
+        return dev_user
+    raise HTTPException(status_code=401, detail="Not logged in")
+
+
+# tests override get_repo with a moto table and get_user_id with a header
 Repo = Annotated[ApplicationRepository, Depends(get_repo)]
+UserId = Annotated[str, Depends(get_user_id)]
 
 
 @app.get("/health")
@@ -36,34 +49,36 @@ def health() -> dict:
 
 
 @app.get("/applications")
-def list_applications(repo: Repo) -> list[Application]:
-    return repo.list()
+def list_applications(repo: Repo, user_id: UserId) -> list[Application]:
+    return repo.list(user_id)
 
 
 @app.post("/applications", status_code=status.HTTP_201_CREATED)
-def create_application(data: ApplicationIn, repo: Repo) -> Application:
-    return repo.create(data)
+def create_application(data: ApplicationIn, repo: Repo, user_id: UserId) -> Application:
+    return repo.create(user_id, data)
 
 
 @app.get("/applications/{app_id}")
-def get_application(app_id: str, repo: Repo) -> Application:
-    found = repo.get(app_id)
+def get_application(app_id: str, repo: Repo, user_id: UserId) -> Application:
+    found = repo.get(user_id, app_id)
     if found is None:
         raise HTTPException(status_code=404, detail="Application not found")
     return found
 
 
 @app.put("/applications/{app_id}")
-def replace_application(app_id: str, data: ApplicationIn, repo: Repo) -> Application:
-    updated = repo.replace(app_id, data)
+def replace_application(
+    app_id: str, data: ApplicationIn, repo: Repo, user_id: UserId
+) -> Application:
+    updated = repo.replace(user_id, app_id, data)
     if updated is None:
         raise HTTPException(status_code=404, detail="Application not found")
     return updated
 
 
 @app.delete("/applications/{app_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_application(app_id: str, repo: Repo) -> Response:
-    if not repo.delete(app_id):
+def delete_application(app_id: str, repo: Repo, user_id: UserId) -> Response:
+    if not repo.delete(user_id, app_id):
         raise HTTPException(status_code=404, detail="Application not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

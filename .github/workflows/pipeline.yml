@@ -131,16 +131,26 @@ jobs:
           echo "FRONTEND_URL=$(terraform output -raw frontend_url)" >> "$GITHUB_ENV"
           echo "BUCKET=$(terraform output -raw frontend_bucket)" >> "$GITHUB_ENV"
           echo "DISTRIBUTION=$(terraform output -raw cloudfront_distribution_id)" >> "$GITHUB_ENV"
+          echo "COGNITO_CLIENT_ID=$(terraform output -raw cognito_client_id)" >> "$GITHUB_ENV"
 
       - name: Publish frontend
         run: |
-          echo "window.APP_CONFIG = { apiUrl: \"${API_URL}\" };" > frontend/config.js
+          cat > frontend/config.js <<EOF
+          window.APP_CONFIG = {
+            apiUrl: "${API_URL}",
+            region: "${AWS_REGION}",
+            cognitoClientId: "${COGNITO_CLIENT_ID}",
+          };
+          EOF
           aws s3 sync frontend "s3://${BUCKET}" --delete
           aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" --paths "/*"
 
       - name: Smoke test
         run: |
           curl --fail --silent --show-error --retry 5 --retry-delay 5 "${API_URL}health"
+          # and the data should be locked without a token
+          code=$(curl --silent --output /dev/null --write-out "%{http_code}" "${API_URL}applications")
+          [ "$code" = "401" ] || { echo "expected 401 without a token, got $code"; exit 1; }
           echo "### Deployed :rocket:" >> "$GITHUB_STEP_SUMMARY"
           echo "- Frontend: ${FRONTEND_URL}" >> "$GITHUB_STEP_SUMMARY"
           echo "- API: ${API_URL}" >> "$GITHUB_STEP_SUMMARY"
