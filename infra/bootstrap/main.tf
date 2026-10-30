@@ -22,6 +22,12 @@ data "aws_caller_identity" "current" {}
 
 locals {
   account_id = data.aws_caller_identity.current.account_id
+
+  # newer repos get ids baked into the oidc sub: repo:owner@123/name@456:...
+  # @* matches those ids (and the owner/name parts are still exact)
+  gh_owner        = split("/", var.github_repo)[0]
+  gh_name         = split("/", var.github_repo)[1]
+  gh_repo_pattern = "${local.gh_owner}@*/${local.gh_name}@*"
 }
 
 resource "aws_s3_bucket" "state" {
@@ -79,8 +85,7 @@ data "aws_iam_policy_document" "github_trust" {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
-        "repo:${var.github_repo}:environment:production",
-        "repo:${var.github_repo}:pull_request",
+        for s in ["environment:production", "pull_request"] : "repo:${local.gh_repo_pattern}:${s}"
       ]
     }
   }
