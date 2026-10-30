@@ -129,6 +129,13 @@ data "aws_iam_policy_document" "deploy" {
     resources = ["*"]
   }
 
+  # CreateUserPool doesn't support resource arns so this has to be *
+  statement {
+    sid       = "Cognito"
+    actions   = ["cognito-idp:*"]
+    resources = ["*"]
+  }
+
   statement {
     sid       = "ReadOnlyLookups"
     actions   = ["logs:DescribeLogGroups", "sts:GetCallerIdentity"]
