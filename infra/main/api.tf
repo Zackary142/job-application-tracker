@@ -69,8 +69,7 @@ resource "aws_apigatewayv2_api" "api" {
   name          = "${var.project}-api"
   protocol_type = "HTTP"
 
-  # apigw answers the browser's OPTIONS preflight itself - it has no token,
-  # so it'd get blocked by the authorizer if it went through to lambda
+  # apigw adds the cors headers itself (and ignores any from lambda)
   cors_configuration {
     allow_origins = ["https://${aws_cloudfront_distribution.frontend.domain_name}"]
     allow_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
@@ -106,6 +105,15 @@ resource "aws_apigatewayv2_route" "proxy" {
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# the authorizer on $default catches the browser's OPTIONS preflight too
+# (which never has a token) -> 401 -> cors fails. this route takes OPTIONS
+# out of auth so apigw's cors config can answer it
+resource "aws_apigatewayv2_route" "preflight" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "OPTIONS /{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 }
 
 # health check stays public for the smoke test

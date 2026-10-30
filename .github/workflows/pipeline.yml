@@ -151,6 +151,11 @@ jobs:
           # and the data should be locked without a token
           code=$(curl --silent --output /dev/null --write-out "%{http_code}" "${API_URL}applications")
           [ "$code" = "401" ] || { echo "expected 401 without a token, got $code"; exit 1; }
+          # browser preflight has no token but still has to succeed or the frontend breaks
+          code=$(curl --silent --output /dev/null --write-out "%{http_code}" -X OPTIONS "${API_URL}applications" \
+            -H "Origin: ${FRONTEND_URL}" -H "Access-Control-Request-Method: POST" \
+            -H "Access-Control-Request-Headers: authorization,content-type")
+          [ "$code" -lt 300 ] || { echo "cors preflight failed with $code"; exit 1; }
           echo "### Deployed :rocket:" >> "$GITHUB_STEP_SUMMARY"
           echo "- Frontend: ${FRONTEND_URL}" >> "$GITHUB_STEP_SUMMARY"
           echo "- API: ${API_URL}" >> "$GITHUB_STEP_SUMMARY"
