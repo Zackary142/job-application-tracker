@@ -1,0 +1,11 @@
+build/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.venv/
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+plan.txt
+.DS_Store
