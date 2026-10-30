@@ -73,12 +73,13 @@ data "aws_iam_policy_document" "github_trust" {
       variable = "token.actions.githubusercontent.com:aud"
       values   = ["sts.amazonaws.com"]
     }
-    # only main (deploy) and PRs (plan) from this repo
+    # only the production env (deploy) and PRs (plan) from this repo
+    # note: jobs with an environment get sub = ...:environment:<name>, not the branch
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
-        "repo:${var.github_repo}:ref:refs/heads/main",
+        "repo:${var.github_repo}:environment:production",
         "repo:${var.github_repo}:pull_request",
       ]
     }

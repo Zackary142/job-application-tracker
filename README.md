@@ -51,7 +51,7 @@ flowchart LR
 - **HTTP API instead of REST API.** It's cheaper and simpler, and I don't need REST API features like API keys or request validation, since FastAPI/pydantic already validates requests.
 - **DynamoDB instead of RDS.** No server to patch, nothing to pay for when idle, and the data is just documents looked up by id. If this ever supported multiple users I'd make the partition key the user id and use `query` instead of `scan`.
 - **A private S3 bucket behind CloudFront (OAC).** The bucket is never public, and the bucket policy only allows my distribution. CloudFront handles HTTPS and caching.
-- **GitHub OIDC instead of access keys.** The pipeline assumes an IAM role using a short-lived token. The trust policy only accepts this repo's `main` branch and its PRs.
+- **GitHub OIDC instead of access keys.** The pipeline assumes an IAM role using a short-lived token. The trust policy only accepts this repo's `production` environment (deploys) and its PRs (plans).
 - **Least-privilege IAM.** The Lambda can only touch its own table and log group. The deploy role is scoped to `job-tracker-*` resources wherever AWS supports it (API Gateway and CloudFront are the exceptions).
 - **Remote state in S3 with native locking** (`use_lockfile`, Terraform 1.10+), so no DynamoDB lock table is needed. The bucket is versioned so I can roll the state back.
 - **Two Terraform stacks.** `bootstrap` is applied once by hand and creates the state bucket and the OIDC role, since the pipeline can't create the role it uses to log in. `main` is everything else and is only ever applied by the pipeline.
