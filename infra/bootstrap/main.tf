@@ -134,6 +134,21 @@ data "aws_iam_policy_document" "deploy" {
     actions   = ["logs:DescribeLogGroups", "sts:GetCallerIdentity"]
     resources = ["*"]
   }
+
+  # apigw access logging uses these, they don't take a resource arn
+  statement {
+    sid = "ApiGatewayAccessLogs"
+    actions = [
+      "logs:CreateLogDelivery",
+      "logs:GetLogDelivery",
+      "logs:UpdateLogDelivery",
+      "logs:DeleteLogDelivery",
+      "logs:ListLogDeliveries",
+      "logs:PutResourcePolicy",
+      "logs:DescribeResourcePolicies",
+    ]
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_role_policy" "deploy" {
