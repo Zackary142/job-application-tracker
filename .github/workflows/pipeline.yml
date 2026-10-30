@@ -1,0 +1,145 @@
+name: CI/CD
+
+# PRs: test + plan. main: test + deploy
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# dont let two deploys run at once
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: eu-west-2
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  test-api:
+    name: Test API
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: api/requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+      - name: Unit tests
+        run: pytest -v
+
+  check-terraform:
+    name: Check Terraform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.5
+      - name: Format
+        run: terraform fmt -check -recursive infra
+      - name: Validate
+        run: |
+          for stack in infra/bootstrap infra/main; do
+            terraform -chdir=$stack init -backend=false -input=false
+            terraform -chdir=$stack validate
+          done
+
+  plan:
+    name: Terraform plan
+    if: github.event_name == 'pull_request'
+    needs: [test-api, check-terraform]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # needed for oidc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.5
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - run: ./scripts/build_lambda.sh
+      - name: Plan
+        working-directory: infra/main
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.AWS_STATE_BUCKET }}" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+          terraform plan -input=false -lock=false -no-color | tee plan.txt
+          {
+            echo '### Terraform plan'
+            echo '```'
+            grep -E '^(Plan:|No changes)' plan.txt || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [test-api, check-terraform]
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.5
+          terraform_wrapper: false # wrapper messes up output -raw
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Build Lambda package
+        run: ./scripts/build_lambda.sh
+
+      - name: Terraform apply
+        working-directory: infra/main
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.AWS_STATE_BUCKET }}" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+          terraform apply -input=false -auto-approve
+          echo "API_URL=$(terraform output -raw api_url)" >> "$GITHUB_ENV"
+          echo "FRONTEND_URL=$(terraform output -raw frontend_url)" >> "$GITHUB_ENV"
+          echo "BUCKET=$(terraform output -raw frontend_bucket)" >> "$GITHUB_ENV"
+          echo "DISTRIBUTION=$(terraform output -raw cloudfront_distribution_id)" >> "$GITHUB_ENV"
+
+      - name: Publish frontend
+        run: |
+          echo "window.APP_CONFIG = { apiUrl: \"${API_URL}\" };" > frontend/config.js
+          aws s3 sync frontend "s3://${BUCKET}" --delete
+          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" --paths "/*"
+
+      - name: Smoke test
+        run: |
+          curl --fail --silent --show-error --retry 5 --retry-delay 5 "${API_URL}health"
+          echo "### Deployed :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Frontend: ${FRONTEND_URL}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- API: ${API_URL}" >> "$GITHUB_STEP_SUMMARY"
