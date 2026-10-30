@@ -79,7 +79,7 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - run: ./scripts/build_lambda.sh
+      - run: bash scripts/build_lambda.sh
       - name: Plan
         working-directory: infra/main
         run: |
@@ -118,7 +118,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Build Lambda package
-        run: ./scripts/build_lambda.sh
+        run: bash scripts/build_lambda.sh
 
       - name: Terraform apply
         working-directory: infra/main
