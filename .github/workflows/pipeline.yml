@@ -60,7 +60,8 @@ jobs:
 
   plan:
     name: Terraform plan
-    if: github.event_name == 'pull_request'
+    # skip until the aws vars are set up (see README)
+    if: github.event_name == 'pull_request' && vars.AWS_ROLE_ARN != ''
     needs: [test-api, check-terraform]
     runs-on: ubuntu-latest
     permissions:
@@ -95,7 +96,7 @@ jobs:
 
   deploy:
     name: Deploy
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.AWS_ROLE_ARN != ''
     needs: [test-api, check-terraform]
     runs-on: ubuntu-latest
     environment: production
