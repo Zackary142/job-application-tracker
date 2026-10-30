@@ -51,4 +51,5 @@ class ApplicationRepository:
 
     def delete(self, app_id: str) -> bool:
         response = self.table.delete_item(Key={"id": app_id}, ReturnValues="ALL_OLD")
-        return "Attributes" in response
+        # .get not "in" - some versions hand back an empty dict for a missing item
+        return bool(response.get("Attributes"))
