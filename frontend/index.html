@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Job Application Tracker</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>Job Application Tracker</h1>
+    <p id="summary" class="muted"></p>
+  </header>
+
+  <main>
+    <form id="app-form">
+      <input type="hidden" name="id">
+      <label>Company <input name="company" required maxlength="100"></label>
+      <label>Role <input name="role" required maxlength="100"></label>
+      <label>Status
+        <select name="status">
+          <option value="applied">Applied</option>
+          <option value="interviewing">Interviewing</option>
+          <option value="offer">Offer</option>
+          <option value="rejected">Rejected</option>
+          <option value="withdrawn">Withdrawn</option>
+        </select>
+      </label>
+      <label>Applied on <input name="applied_on" type="date" required></label>
+      <label class="wide">Job URL <input name="url" type="url" placeholder="https://"></label>
+      <label class="wide">Notes <textarea name="notes" rows="2" maxlength="2000"></textarea></label>
+      <div class="actions wide">
+        <button type="submit" id="submit-btn">Add application</button>
+        <button type="button" id="cancel-btn" class="secondary" hidden>Cancel edit</button>
+      </div>
+      <p id="error" class="error" role="alert"></p>
+    </form>
+
+    <table>
+      <thead>
+        <tr><th>Company</th><th>Role</th><th>Status</th><th>Applied</th><th></th></tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p id="empty" class="muted" hidden>No applications yet. Add your first one above.</p>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
