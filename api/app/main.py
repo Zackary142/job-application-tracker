@@ -1,4 +1,5 @@
 import os
+import re
 from functools import lru_cache
 from typing import Annotated
 
@@ -38,6 +39,17 @@ def get_user_id(request: Request) -> str:
     if dev_user := os.environ.get("DEV_USER_ID"):
         return dev_user
     raise HTTPException(status_code=401, detail="Not logged in")
+
+
+def can_autofill(request: Request) -> bool:
+    # auto-fill costs money per go so it's only for accounts in the cognito
+    # "autofill" group (added by hand in the console). anyone can sign up otherwise
+    event = request.scope.get("aws.event")
+    if event:
+        claims = event["requestContext"]["authorizer"]["jwt"]["claims"]
+        # http api passes lists through as a string like "[autofill admin]"
+        return "autofill" in re.findall(r"[\w-]+", str(claims.get("cognito:groups", "")))
+    return bool(os.environ.get("DEV_USER_ID"))
 
 
 # tests override get_repo with a moto table and get_user_id with a header
@@ -91,8 +103,12 @@ class JobAdText(BaseModel):
 
 
 @app.post("/extract")
-def extract(data: JobAdText, user_id: UserId) -> dict:
+def extract(
+    data: JobAdText, user_id: UserId, allowed: Annotated[bool, Depends(can_autofill)]
+) -> dict:
     # user_id isnt used, its just here so you have to be logged in
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Auto-fill isn't turned on for your account")
     try:
         return extract_job_ad(data.text)
     except ExtractError as err:

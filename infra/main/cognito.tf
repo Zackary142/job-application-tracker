@@ -45,3 +45,11 @@ resource "aws_cognito_user_pool_client" "web" {
     refresh_token = "days"
   }
 }
+
+# who gets the ai auto-fill (it costs per use). add yourself in the console:
+# cognito > user pool > groups > autofill > add user
+resource "aws_cognito_user_group" "autofill" {
+  name         = "autofill"
+  user_pool_id = aws_cognito_user_pool.users.id
+  description  = "Can use the job ad auto-fill"
+}

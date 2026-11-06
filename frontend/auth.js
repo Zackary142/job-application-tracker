@@ -55,6 +55,17 @@ const Auth = (() => {
 
     email: () => load()?.email,
 
+    // cognito groups from the token. only used to hide stuff in the ui,
+    // the api checks the real thing
+    groups() {
+      try {
+        const payload = load().accessToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+        return JSON.parse(atob(payload))["cognito:groups"] || [];
+      } catch {
+        return [];
+      }
+    },
+
     signUp: (email, password) =>
       call("SignUp", { Username: email, Password: password, UserAttributes: [{ Name: "email", Value: email }] }),
 

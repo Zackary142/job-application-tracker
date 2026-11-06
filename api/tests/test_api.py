@@ -6,7 +6,7 @@ from fastapi import Request
 from fastapi.testclient import TestClient
 from moto import mock_aws
 
-from app.main import app, get_repo, get_user_id
+from app.main import app, can_autofill, get_repo, get_user_id
 from app.repository import ApplicationRepository
 
 TABLE = "test-applications"
@@ -36,6 +36,7 @@ def client(monkeypatch):
         )
         app.dependency_overrides[get_repo] = lambda: ApplicationRepository(TABLE)
         app.dependency_overrides[get_user_id] = fake_user
+        app.dependency_overrides[can_autofill] = lambda: True
         yield TestClient(app)
         app.dependency_overrides.clear()
 
@@ -237,3 +238,21 @@ def test_old_items_without_new_fields_still_load(client):
     )
     body = client.get("/applications/old").json()
     assert body["salary"] == "" and body["closes_on"] is None and body["skills"] == []
+
+
+def test_extract_only_for_autofill_group(client):
+    app.dependency_overrides[can_autofill] = lambda: False
+    res = client.post("/extract", json={"text": AD})
+    assert res.status_code == 403
+
+
+@pytest.mark.parametrize(
+    ("groups", "allowed"),
+    [("[autofill]", True), ("[admin autofill]", True), ("[other]", False), (None, False)],
+)
+def test_autofill_group_from_token(groups, allowed):
+    from types import SimpleNamespace
+
+    claims = {"sub": "abc"} if groups is None else {"sub": "abc", "cognito:groups": groups}
+    event = {"requestContext": {"authorizer": {"jwt": {"claims": claims}}}}
+    assert can_autofill(SimpleNamespace(scope={"aws.event": event})) is allowed

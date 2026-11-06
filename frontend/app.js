@@ -212,6 +212,8 @@ function showTracker() {
     document.getElementById("who").textContent = Auth.email();
     document.getElementById("account").hidden = false;
   }
+  // auto-fill is only switched on for some accounts
+  document.getElementById("autofill").hidden = Auth.enabled && !Auth.groups().includes("autofill");
   resetForm();
   load();
 }
