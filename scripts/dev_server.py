@@ -26,6 +26,21 @@ with mock_aws():
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-    from app.main import app
+    import app.main as api
 
-    uvicorn.run(app, port=8000)
+    # no bedrock locally, so auto-fill gives back a canned answer.
+    # REAL_AI=1 to use the real thing (needs aws creds with bedrock access)
+    if not os.environ.get("REAL_AI"):
+        api.extract_job_ad = lambda text: {
+            "company": "Acme",
+            "role": "Junior Cloud Engineer",
+            "salary": "£32,000 - £36,000 a year",
+            "experience": "Some AWS or Azure, a degree or similar",
+            "closes_on": "2026-11-30",
+            "location": "London",
+            "work_mode": "hybrid",
+            "job_type": "Full-time, permanent",
+            "skills": ["AWS", "Terraform", "Python", "CI/CD"],
+        }
+
+    uvicorn.run(api.app, port=8000)

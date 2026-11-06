@@ -36,10 +36,13 @@ function render() {
         ? Object.assign(document.createElement("a"), { href: app.url, textContent: app.company, target: "_blank", rel: "noopener" })
         : document.createTextNode(app.company);
       // append/textContent not innerHTML - avoids xss from notes etc
-      const cells = [company, app.role, app.status, app.applied_on];
+      const role = [app.role, app.salary].filter(Boolean).join(" · ");
+      const closes = app.closes_on ? `closes ${app.closes_on}` : "";
+      const cells = [company, role, app.status, app.applied_on, closes];
       cells.forEach((value, i) => {
         const td = document.createElement("td");
         if (i === 2) td.className = `status status-${value}`;
+        if (i === 4 && closingSoon(app)) td.className = "closing-soon";
         td.append(value);
         tr.append(td);
       });
@@ -56,6 +59,13 @@ function render() {
   const active = applications.filter((a) => ["applied", "interviewing"].includes(a.status)).length;
   document.getElementById("summary").textContent =
     `${applications.length} applications, ${active} still in progress`;
+}
+
+// still open and closes in the next week
+function closingSoon(app) {
+  if (!app.closes_on || app.status !== "applied") return false;
+  const days = (new Date(app.closes_on) - new Date()) / 86400000;
+  return days >= -1 && days <= 7;
 }
 
 function button(label, onClick) {
@@ -78,17 +88,24 @@ async function load() {
 
 function startEdit(app) {
   for (const [key, value] of Object.entries(app)) {
-    if (form.elements[key]) form.elements[key].value = value ?? "";
+    if (form.elements[key]) form.elements[key].value = formValue(value);
   }
   submitBtn.textContent = "Save changes";
   cancelBtn.hidden = false;
   form.scrollIntoView({ behavior: "smooth" });
 }
 
+// skills is a list in the api but a comma separated box in the form
+function formValue(value) {
+  return Array.isArray(value) ? value.join(", ") : (value ?? "");
+}
+
 function resetForm() {
   form.reset();
   form.elements.id.value = "";
   form.elements.applied_on.valueAsDate = new Date();
+  document.getElementById("ad-text").value = "";
+  autofillMsg.textContent = "";
   submitBtn.textContent = "Add application";
   cancelBtn.hidden = true;
   errorEl.textContent = "";
@@ -106,6 +123,9 @@ form.addEventListener("submit", async (event) => {
   const id = data.id;
   delete data.id;
   if (!data.url) delete data.url;
+  if (!data.closes_on) delete data.closes_on;
+  if (!data.work_mode) delete data.work_mode;
+  data.skills = data.skills.split(",").map((s) => s.trim()).filter(Boolean);
   try {
     await request(id ? `/applications/${id}` : "/applications", {
       method: id ? "PUT" : "POST",
@@ -119,6 +139,41 @@ form.addEventListener("submit", async (event) => {
 });
 
 cancelBtn.addEventListener("click", resetForm);
+
+// --- paste a job ad, ai fills the form in. you still check it and hit save ---
+
+const autofillBtn = document.getElementById("autofill-btn");
+const autofillMsg = document.getElementById("autofill-msg");
+
+autofillBtn.addEventListener("click", async () => {
+  const text = document.getElementById("ad-text").value.trim();
+  if (text.length < 20) {
+    autofillMsg.textContent = "Paste the job ad in first.";
+    return;
+  }
+  autofillBtn.disabled = true;
+  autofillMsg.textContent = "Reading the ad...";
+  errorEl.textContent = "";
+  try {
+    const fields = await request("/extract", { method: "POST", body: JSON.stringify({ text }) });
+    if (!fields) return;
+    let filled = 0;
+    for (const [key, value] of Object.entries(fields)) {
+      // only fill what it found, dont wipe things you've typed
+      if (!form.elements[key] || value == null || value === "" || value.length === 0) continue;
+      form.elements[key].value = formValue(value);
+      filled++;
+    }
+    autofillMsg.textContent = filled
+      ? `Filled in ${filled} fields, check them over then save.`
+      : "Couldn't find much in that, fill it in manually.";
+  } catch (err) {
+    autofillMsg.textContent = "";
+    errorEl.textContent = err.message;
+  } finally {
+    autofillBtn.disabled = false;
+  }
+});
 
 // --- login / sign up ---
 

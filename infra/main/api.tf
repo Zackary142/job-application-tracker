@@ -13,7 +13,7 @@ resource "aws_iam_role" "api" {
   assume_role_policy = data.aws_iam_policy_document.lambda_trust.json
 }
 
-# only its own table + logs
+# only its own table + logs, plus calling claude on bedrock for the auto-fill
 data "aws_iam_policy_document" "api" {
   statement {
     actions = [
@@ -27,6 +27,12 @@ data "aws_iam_policy_document" "api" {
   statement {
     actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
     resources = ["${aws_cloudwatch_log_group.api.arn}:*"]
+  }
+  statement {
+    # bedrock-mantle is the endpoint the anthropic sdk uses. couldnt find an arn
+    # format documented for it so this is * for now
+    actions   = ["bedrock-mantle:CreateInference"]
+    resources = ["*"]
   }
 }
 
@@ -50,13 +56,14 @@ resource "aws_lambda_function" "api" {
   handler          = "app.main.handler"
   filename         = var.lambda_zip_path
   source_code_hash = filebase64sha256(var.lambda_zip_path)
-  memory_size      = 256
-  timeout          = 10
+  memory_size      = 512 # more memory = more cpu, helps the cold start
+  timeout          = 29  # auto-fill waits on the model. api gateway cuts off at 30 anyway
 
   environment {
     variables = {
       TABLE_NAME      = aws_dynamodb_table.applications.name
       ALLOWED_ORIGINS = "https://${aws_cloudfront_distribution.frontend.domain_name}"
+      EXTRACT_MODEL   = var.extract_model
     }
   }
 

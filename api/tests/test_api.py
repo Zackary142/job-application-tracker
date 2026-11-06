@@ -115,3 +115,125 @@ def test_user_id_comes_from_the_cognito_claims():
     event = {"requestContext": {"authorizer": {"jwt": {"claims": {"sub": "user-123"}}}}}
     request = Request({"type": "http", "aws.event": event})
     assert get_user_id(request) == "user-123"
+
+
+# --- job ad auto-fill. bedrock is faked, these check our side of it ---
+
+AD = "Junior Cloud Engineer at Acme. £32k-£36k. Hybrid, London. Closes 30 Nov 2026."
+
+
+class FakeMessages:
+    def __init__(self, response=None, error=None):
+        self.response, self.error, self.calls = response, error, []
+
+    def parse(self, **kwargs):
+        self.calls.append(kwargs)
+        if self.error:
+            raise self.error
+        return self.response
+
+
+class FakeClient:
+    def __init__(self, **kwargs):
+        self.messages = FakeMessages(**kwargs)
+
+
+def fake_response(stop_reason="end_turn", **overrides):
+    from types import SimpleNamespace
+
+    from app.extract import JobAd
+
+    fields = {
+        "company": "Acme",
+        "role": "Junior Cloud Engineer",
+        "salary": "£32,000 - £36,000 a year",
+        "experience": "Some AWS experience",
+        "closes_on": "2026-11-30",
+        "location": "London",
+        "work_mode": "hybrid",
+        "job_type": "Full-time, permanent",
+        "skills": ["AWS", "Terraform"],
+        **overrides,
+    }
+    return SimpleNamespace(stop_reason=stop_reason, parsed_output=JobAd(**fields))
+
+
+@pytest.fixture
+def fake_ai(monkeypatch):
+    def use(**kwargs):
+        fake = FakeClient(**kwargs)
+        monkeypatch.setattr("app.extract.get_client", lambda: fake)
+        return fake
+
+    return use
+
+
+def test_extract_fills_fields(client, fake_ai):
+    fake = fake_ai(response=fake_response())
+    res = client.post("/extract", json={"text": AD})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["salary"] == "£32,000 - £36,000 a year"
+    assert body["closes_on"] == "2026-11-30"
+    assert body["work_mode"] == "hybrid"
+    # the ad goes in the user message, wrapped in tags
+    sent = fake.messages.calls[0]
+    assert AD in sent["messages"][0]["content"]
+    assert sent["model"].startswith("anthropic.")
+
+
+def test_extract_result_can_be_saved(client, fake_ai):
+    fake_ai(response=fake_response())
+    fields = client.post("/extract", json={"text": AD}).json()
+    saved = client.post("/applications", json={**SAMPLE, **fields})
+    assert saved.status_code == 201
+    assert saved.json()["skills"] == ["AWS", "Terraform"]
+
+
+def test_extract_drops_bad_dates(client, fake_ai):
+    fake_ai(response=fake_response(closes_on="end of the month"))
+    assert client.post("/extract", json={"text": AD}).json()["closes_on"] is None
+
+
+def test_extract_refusal(client, fake_ai):
+    fake_ai(response=fake_response(stop_reason="refusal"))
+    res = client.post("/extract", json={"text": AD})
+    assert res.status_code == 502
+    assert "Couldn't read" in res.json()["detail"]
+
+
+def test_extract_bedrock_down(client, fake_ai):
+    import anthropic
+    import httpx2
+
+    req = httpx2.Request("POST", "https://bedrock-mantle.eu-west-2.api.aws/anthropic/v1/messages")
+    fake_ai(error=anthropic.APIConnectionError(request=req))
+    res = client.post("/extract", json={"text": AD})
+    assert res.status_code == 502
+
+
+def test_extract_needs_login(client):
+    app.dependency_overrides.pop(get_user_id)
+    assert client.post("/extract", json={"text": AD}).status_code == 401
+
+
+def test_extract_text_limits(client):
+    assert client.post("/extract", json={"text": "too short"}).status_code == 422
+    assert client.post("/extract", json={"text": "x" * 20001}).status_code == 422
+
+
+def test_old_items_without_new_fields_still_load(client):
+    # items saved before the auto-fill fields existed
+    boto3.resource("dynamodb").Table(TABLE).put_item(
+        Item={
+            "user_id": "alice",
+            "id": "old",
+            "created_at": "x",
+            "updated_at": "x",
+            **SAMPLE,
+            "status": "applied",
+            "notes": "",
+        }
+    )
+    body = client.get("/applications/old").json()
+    assert body["salary"] == "" and body["closes_on"] is None and body["skills"] == []

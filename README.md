@@ -1,12 +1,12 @@
 # Job Application Tracker
 
-A small app I use to keep track of job applications: company, role, status, date and notes. You sign up with your email and only ever see your own applications. The app itself is simple on purpose. The main point of the project is everything around it: infrastructure as code, a CI/CD pipeline, and deploying to AWS without any long-lived credentials.
+A small app I use to keep track of job applications: company, role, status, dates, salary and notes. You sign up with your email and only ever see your own applications. You can paste in a job ad and it fills the form in for you (salary, experience needed, closing date, location, etc.) using Claude on Amazon Bedrock. The app itself is simple on purpose. The main point of the project is everything around it: infrastructure as code, a CI/CD pipeline, and deploying to AWS without any long-lived credentials.
 
 **Live:** https://dbnlo8ssgi74t.cloudfront.net (make an account to try it)
 
 ![screenshot](docs/screenshot.png)
 
-**Stack:** Python (FastAPI) · AWS Lambda · API Gateway · DynamoDB · Cognito · S3 + CloudFront · Terraform · GitHub Actions
+**Stack:** Python (FastAPI) · AWS Lambda · API Gateway · DynamoDB · Cognito · Bedrock · S3 + CloudFront · Terraform · GitHub Actions
 
 ## Architecture
 
@@ -21,6 +21,7 @@ flowchart LR
         lambda[Lambda<br/>FastAPI]
         ddb[(DynamoDB)]
         cognito[Cognito<br/>user pool]
+        bedrock[Bedrock<br/>Claude]
         cw[CloudWatch Logs]
         state[(S3<br/>Terraform state)]
     end
@@ -36,6 +37,7 @@ flowchart LR
     apigw -. "verify JWT" .-> cognito
     apigw --> lambda
     lambda --> ddb
+    lambda -- "job ad auto-fill" --> bedrock
     lambda -.-> cw
     apigw -.-> cw
 
@@ -49,7 +51,8 @@ flowchart LR
 3. The browser calls the API on API Gateway, sending that token. API Gateway's JWT authorizer checks it before anything else runs, so a request without a valid token never reaches Lambda.
 4. Every route goes to a single Lambda running FastAPI, which uses Mangum to translate the API Gateway events. It takes the user's id from the token claims.
 5. The Lambda reads and writes a DynamoDB table keyed by that user id.
-6. GitHub Actions deploys everything. It logs into AWS with OIDC, so no AWS keys are stored in GitHub.
+6. For auto-fill, the Lambda sends the pasted ad to Claude on Bedrock and gets back structured fields, which go into the form for you to check before saving. Nothing is saved until you hit save.
+7. GitHub Actions deploys everything. It logs into AWS with OIDC, so no AWS keys are stored in GitHub.
 
 ## Why it's built like this
 
@@ -64,6 +67,7 @@ flowchart LR
 - **Least-privilege IAM.** The Lambda can only touch its own table and log group. The deploy role is scoped to `job-tracker-*` resources wherever AWS supports it (API Gateway, CloudFront and Cognito are the exceptions).
 - **Remote state in S3 with native locking** (`use_lockfile`, Terraform 1.10+), so no DynamoDB lock table is needed. The bucket is versioned so I can roll the state back.
 - **Two Terraform stacks.** `bootstrap` is applied once by hand and creates the state bucket and the OIDC role, since the pipeline can't create the role it uses to log in. `main` is everything else and is only ever applied by the pipeline.
+- **Bedrock for the auto-fill instead of an API key.** The Lambda calls Claude with its IAM role, so there's no secret to store or rotate, and the bill goes on the same AWS account. It uses structured outputs, so the response always matches a pydantic schema instead of me parsing free text. The ad is capped at 20k characters and you have to be logged in, so nobody can run up the bill. The model is a Terraform variable if I want to swap to a cheaper one.
 - **arm64 Lambda.** It costs less per ms than x86. The build script downloads arm64 wheels so the package matches the runtime no matter where it's built.
 
 ## Pipeline
@@ -108,7 +112,8 @@ cd api && pytest && cd ..
 python scripts/dev_server.py
 
 # frontend on :8080 (in another terminal), config.js already points at localhost:8000.
-# locally there's no cognito, so login is skipped and you're a fake "local-dev" user
+# locally there's no cognito, so login is skipped and you're a fake "local-dev" user.
+# auto-fill returns a canned answer locally, set REAL_AI=1 to call bedrock for real
 cd frontend && python -m http.server 8080
 ```
 
@@ -125,13 +130,14 @@ You'll need an AWS account, Terraform 1.10+ and the AWS CLI logged in as an admi
 2. **Add two repository variables** under Settings → Secrets and variables → Actions → Variables, using the bootstrap outputs:
    - `AWS_ROLE_ARN` = `github_actions_role_arn`
    - `AWS_STATE_BUCKET` = `state_bucket`
-3. **Push to `main`.** The pipeline creates everything else and prints the frontend URL in the job summary.
+3. **Turn on Claude in Bedrock** (once): in the AWS console go to Amazon Bedrock → Model access in eu-west-2 and request access to Claude Opus 5.5 (or whichever model `extract_model` is set to). Without this, everything works except auto-fill.
+4. **Push to `main`.** The pipeline creates everything else and prints the frontend URL in the job summary.
 
 To tear it down, run `terraform destroy` in `infra/main` (using the same `-backend-config` flags as the pipeline), then in `infra/bootstrap`.
 
 ## Cost
 
-Pennies a month. Everything is billed per request and nothing runs while idle. Lambda, DynamoDB, CloudFront and Cognito all have always-free allowances that this stays well under, so the only real cost is API Gateway at about $1 per million requests.
+Pennies a month. Everything is billed per request and nothing runs while idle. Lambda, DynamoDB, CloudFront and Cognito all have always-free allowances that this stays well under, so the only real costs are API Gateway at about $1 per million requests and the auto-fill, which is a few pence per job ad on Opus 5.5.
 
 ## What I'd add next
 

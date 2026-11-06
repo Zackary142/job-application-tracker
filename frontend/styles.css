@@ -53,3 +53,8 @@ a { color: var(--accent); }
 .auth h2 { margin: 0; font-size: 1.2rem; }
 .auth p { margin: 0; }
 button.link { background: none; border: none; color: var(--accent); padding: 0; text-align: left; }
+.autofill { display: flex; flex-direction: column; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.autofill .actions { align-items: center; }
+button:disabled { opacity: 0.6; cursor: wait; }
+.closing-soon { color: var(--danger); font-weight: 500; }
+.autofill button { white-space: nowrap; }

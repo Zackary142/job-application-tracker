@@ -39,6 +39,15 @@
   <main id="tracker" hidden>
     <form id="app-form">
       <input type="hidden" name="id">
+      <div class="autofill wide">
+        <label>Paste a job ad to fill this in for you
+          <textarea id="ad-text" rows="3" maxlength="20000" placeholder="Paste the job description here"></textarea>
+        </label>
+        <div class="actions">
+          <button type="button" id="autofill-btn" class="secondary">Auto-fill</button>
+          <span id="autofill-msg" class="muted"></span>
+        </div>
+      </div>
       <label>Company <input name="company" required maxlength="100"></label>
       <label>Role <input name="role" required maxlength="100"></label>
       <label>Status
@@ -51,6 +60,20 @@
         </select>
       </label>
       <label>Applied on <input name="applied_on" type="date" required></label>
+      <label>Closes on <input name="closes_on" type="date"></label>
+      <label>Salary <input name="salary" maxlength="200"></label>
+      <label>Location <input name="location" maxlength="100"></label>
+      <label>Work mode
+        <select name="work_mode">
+          <option value="">-</option>
+          <option value="remote">Remote</option>
+          <option value="hybrid">Hybrid</option>
+          <option value="onsite">On-site</option>
+        </select>
+      </label>
+      <label>Job type <input name="job_type" maxlength="100" placeholder="e.g. Graduate scheme"></label>
+      <label class="wide">Experience needed <input name="experience" maxlength="300"></label>
+      <label class="wide">Skills <input name="skills" placeholder="comma separated, e.g. AWS, Terraform"></label>
       <label class="wide">Job URL <input name="url" type="url" placeholder="https://"></label>
       <label class="wide">Notes <textarea name="notes" rows="2" maxlength="2000"></textarea></label>
       <div class="actions wide">
@@ -62,7 +85,7 @@
 
     <table>
       <thead>
-        <tr><th>Company</th><th>Role</th><th>Status</th><th>Applied</th><th></th></tr>
+        <tr><th>Company</th><th>Role</th><th>Status</th><th>Applied</th><th>Closes</th><th></th></tr>
       </thead>
       <tbody id="rows"></tbody>
     </table>

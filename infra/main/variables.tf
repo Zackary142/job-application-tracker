@@ -21,3 +21,9 @@ variable "log_retention_days" {
   type        = number
   default     = 14
 }
+
+variable "extract_model" {
+  description = "Bedrock model the job ad auto-fill uses."
+  type        = string
+  default     = "anthropic.claude-opus-5-5"
+}

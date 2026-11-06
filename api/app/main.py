@@ -5,7 +5,9 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
+from pydantic import BaseModel, Field
 
+from app.extract import ExtractError, extract_job_ad
 from app.models import Application, ApplicationIn
 from app.repository import ApplicationRepository
 
@@ -81,6 +83,20 @@ def delete_application(app_id: str, repo: Repo, user_id: UserId) -> Response:
     if not repo.delete(user_id, app_id):
         raise HTTPException(status_code=404, detail="Application not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+class JobAdText(BaseModel):
+    # cap it so someone can't paste a novel in and run up the bill
+    text: str = Field(min_length=20, max_length=20000)
+
+
+@app.post("/extract")
+def extract(data: JobAdText, user_id: UserId) -> dict:
+    # user_id isnt used, its just here so you have to be logged in
+    try:
+        return extract_job_ad(data.text)
+    except ExtractError as err:
+        raise HTTPException(status_code=502, detail=str(err)) from err
 
 
 # lambda entrypoint
