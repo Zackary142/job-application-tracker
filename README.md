@@ -67,7 +67,7 @@ flowchart LR
 - **Least-privilege IAM.** The Lambda can only touch its own table and log group. The deploy role is scoped to `job-tracker-*` resources wherever AWS supports it (API Gateway, CloudFront and Cognito are the exceptions).
 - **Remote state in S3 with native locking** (`use_lockfile`, Terraform 1.10+), so no DynamoDB lock table is needed. The bucket is versioned so I can roll the state back.
 - **Two Terraform stacks.** `bootstrap` is applied once by hand and creates the state bucket and the OIDC role, since the pipeline can't create the role it uses to log in. `main` is everything else and is only ever applied by the pipeline.
-- **Bedrock for the auto-fill instead of an API key.** The Lambda calls Claude with its IAM role, so there's no secret to store or rotate, and the bill goes on the same AWS account. It uses structured outputs, so the response always matches a pydantic schema instead of me parsing free text. Since it costs per use and anyone can sign up, it's only switched on for accounts in a Cognito `autofill` group. The API checks the group claim in the token (the frontend just hides the box for everyone else), and the ad is capped at 20k characters. The model is a Terraform variable if I want to swap to a cheaper one.
+- **Bedrock for the auto-fill instead of an API key.** The Lambda calls Claude with its IAM role, so there's no secret to store or rotate, and the bill goes on the same AWS account. It uses structured outputs, so the response always matches a pydantic schema instead of me parsing free text. Since it costs per use and anyone can sign up, it's only switched on for accounts in a Cognito `autofill` group. The API checks the group claim in the token (the frontend just hides the box for everyone else), and the ad is capped at 20k characters. It uses Haiku 5.5, the cheapest Claude model, since pulling fields out of an ad is a simple job. The model is a Terraform variable if I ever want to swap it.
 - **arm64 Lambda.** It costs less per ms than x86. The build script downloads arm64 wheels so the package matches the runtime no matter where it's built.
 
 ## Pipeline
@@ -130,14 +130,14 @@ You'll need an AWS account, Terraform 1.10+ and the AWS CLI logged in as an admi
 2. **Add two repository variables** under Settings → Secrets and variables → Actions → Variables, using the bootstrap outputs:
    - `AWS_ROLE_ARN` = `github_actions_role_arn`
    - `AWS_STATE_BUCKET` = `state_bucket`
-3. **Turn on Claude in Bedrock** (once): in the AWS console go to Amazon Bedrock → Model access in eu-west-2 and request access to Claude Opus 5.5 (or whichever model `extract_model` is set to). Then once you've signed up on the site, add yourself to the `autofill` group (Cognito → User pools → job-tracker-users → Groups → autofill → Add user) and log out and back in. Without these, everything works except auto-fill.
+3. **Turn on Claude in Bedrock** (once): in the AWS console go to Amazon Bedrock → Model access in eu-west-2 and request access to Claude Haiku 5.5 (or whichever model `extract_model` is set to). Then once you've signed up on the site, add yourself to the `autofill` group (Cognito → User pools → job-tracker-users → Groups → autofill → Add user) and log out and back in. Without these, everything works except auto-fill.
 4. **Push to `main`.** The pipeline creates everything else and prints the frontend URL in the job summary.
 
 To tear it down, run `terraform destroy` in `infra/main` (using the same `-backend-config` flags as the pipeline), then in `infra/bootstrap`.
 
 ## Cost
 
-Pennies a month. Everything is billed per request and nothing runs while idle. Lambda, DynamoDB, CloudFront and Cognito all have always-free allowances that this stays well under, so the only real costs are API Gateway at about $1 per million requests and the auto-fill, which is a few pence per job ad on Opus 5.5.
+Pennies a month. Everything is billed per request and nothing runs while idle. Lambda, DynamoDB, CloudFront and Cognito all have always-free allowances that this stays well under, so the only real costs are API Gateway at about $1 per million requests and the auto-fill, which is a fraction of a penny per job ad on Haiku 5.5.
 
 ## What I'd add next
 

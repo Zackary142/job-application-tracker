@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.models import WorkMode
 
-MODEL = os.environ.get("EXTRACT_MODEL", "anthropic.claude-opus-5-5")
+MODEL = os.environ.get("EXTRACT_MODEL", "anthropic.claude-haiku-5-5")
 
 SYSTEM = """You pull details out of job adverts for someone tracking their applications.
 Only use what the ad actually says. If something isn't in the ad, return null (or an empty
