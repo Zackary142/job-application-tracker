@@ -4,7 +4,9 @@ A small app I use to keep track of job applications: company, role, status, date
 
 **Live:** https://dbnlo8ssgi74t.cloudfront.net (make an account to try it)
 
-![screenshot](docs/screenshot.png)
+![the tracker with a job link auto-filled into the form](docs/screenshot.png)
+
+_Pasting a job link fills in the form (company, salary, location, experience, skills...) ready to check and save._
 
 **Stack:** Python (FastAPI) · AWS Lambda · API Gateway · DynamoDB · Cognito · Bedrock · S3 + CloudFront · Terraform · GitHub Actions
 

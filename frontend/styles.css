@@ -58,3 +58,4 @@ button.link { background: none; border: none; color: var(--accent); padding: 0; 
 button:disabled { opacity: 0.6; cursor: wait; }
 .closing-soon { color: var(--danger); font-weight: 500; }
 .autofill button { white-space: nowrap; }
+td:nth-child(4), td:nth-child(5) { white-space: nowrap; }
