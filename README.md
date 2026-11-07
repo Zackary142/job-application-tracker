@@ -122,7 +122,7 @@ cd frontend && python -m http.server 8080
 
 ## Deploying it yourself
 
-You'll need an AWS account, Terraform 1.10+ and the AWS CLI logged in as an admin.
+Fork this repo to your own GitHub account first. Everything gets created in whichever AWS account your CLI is logged into, so it's your account and your bill. You'll need an AWS account, Terraform 1.10+ and the AWS CLI logged in as an admin.
 
 1. **Bootstrap** (once):
    ```bash
@@ -130,10 +130,11 @@ You'll need an AWS account, Terraform 1.10+ and the AWS CLI logged in as an admi
    terraform init
    terraform apply -var="github_repo=<your-user>/job-application-tracker"
    ```
+   `<your-user>` is **your** GitHub username (the fork). The deploy role only trusts that repo, so the pipeline in your fork can deploy and nobody else's can.
 2. **Add two repository variables** under Settings → Secrets and variables → Actions → Variables, using the bootstrap outputs:
    - `AWS_ROLE_ARN` = `github_actions_role_arn`
    - `AWS_STATE_BUCKET` = `state_bucket`
-3. **Turn on Claude in Bedrock** (once): in the AWS console go to Amazon Bedrock → Model access in eu-west-2 and request access to Claude Haiku 4.5 (or whichever model `extract_model` is set to). Then once you've signed up on the site, add yourself to the `autofill` group (Cognito → User pools → job-tracker-users → Groups → autofill → Add user) and log out and back in. Without these, everything works except auto-fill.
+3. **Turn on Claude in Bedrock** (once): in the AWS console open Amazon Bedrock in eu-west-2, find Claude Haiku 4.5 in the model catalog and fill in Anthropic's one-off use-case form if it asks. Sending "hi" in the playground is a quick way to check it works. Then once you've signed up on the site, add yourself to the `autofill` group (Cognito → User pools → job-tracker-users → Groups → autofill → Add user) and log out and back in. Without these, everything works except auto-fill.
 4. **Push to `main`.** The pipeline creates everything else and prints the frontend URL in the job summary.
 
 To tear it down, run `terraform destroy` in `infra/main` (using the same `-backend-config` flags as the pipeline), then in `infra/bootstrap`.
