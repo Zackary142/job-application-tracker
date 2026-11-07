@@ -69,7 +69,7 @@ flowchart LR
 - **Two Terraform stacks.** `bootstrap` is applied once by hand and creates the state bucket and the OIDC role, since the pipeline can't create the role it uses to log in. `main` is everything else and is only ever applied by the pipeline.
 - **Bedrock for the auto-fill instead of an API key.** The Lambda calls Claude with its IAM role, so there's no secret to store or rotate, and the bill goes on the same AWS account. It uses structured outputs, so the response always matches a pydantic schema instead of me parsing free text.
 - **Auto-fill is locked to approved accounts, and the API enforces it, not the UI.** Anyone can sign up, but auto-fill costs money per use, so it's only switched on for accounts in a Cognito `autofill` group. Only someone with access to my AWS console can add people to it, and nobody's listed in the code. That's authentication (you're logged in) vs authorization (you're allowed to use this). The frontend hides the paste box for everyone else, but that's just cosmetic: the API reads the group from the signed access token and returns a 403 if you're not in it, so editing the page or calling the API directly gets you nowhere. Cognito signs the token and API Gateway verifies it, so the group can't be faked. The ad is also capped at 20k characters.
-- **A mid-size model, not the biggest.** Pulling a few fields out of a job ad is a simple job, so it uses Claude Sonnet 5 at low effort, which works out at roughly 1p per ad. I wanted Haiku 5.5 (about 10x cheaper again) but it isn't enabled on new Bedrock accounts by default, so the model is a Terraform variable and switching is one line.
+- **The cheap model, not the biggest.** Pulling a few fields out of a job ad is a simple job, so it uses Claude Haiku 4.5, which works out at roughly 0.5p per ad. I wanted Haiku 5.5 but it isn't enabled on new Bedrock accounts by default. The SDK is pinned to 1.17 because newer releases send an API version Bedrock only accepts for Claude 4.7+. The model is a Terraform variable, so swapping later is one line.
 - **arm64 Lambda.** It costs less per ms than x86. The build script downloads arm64 wheels so the package matches the runtime no matter where it's built.
 
 ## Pipeline
@@ -132,14 +132,14 @@ You'll need an AWS account, Terraform 1.10+ and the AWS CLI logged in as an admi
 2. **Add two repository variables** under Settings → Secrets and variables → Actions → Variables, using the bootstrap outputs:
    - `AWS_ROLE_ARN` = `github_actions_role_arn`
    - `AWS_STATE_BUCKET` = `state_bucket`
-3. **Turn on Claude in Bedrock** (once): in the AWS console go to Amazon Bedrock → Model access in eu-west-2 and request access to Claude Sonnet 5 (or whichever model `extract_model` is set to). Then once you've signed up on the site, add yourself to the `autofill` group (Cognito → User pools → job-tracker-users → Groups → autofill → Add user) and log out and back in. Without these, everything works except auto-fill.
+3. **Turn on Claude in Bedrock** (once): in the AWS console go to Amazon Bedrock → Model access in eu-west-2 and request access to Claude Haiku 4.5 (or whichever model `extract_model` is set to). Then once you've signed up on the site, add yourself to the `autofill` group (Cognito → User pools → job-tracker-users → Groups → autofill → Add user) and log out and back in. Without these, everything works except auto-fill.
 4. **Push to `main`.** The pipeline creates everything else and prints the frontend URL in the job summary.
 
 To tear it down, run `terraform destroy` in `infra/main` (using the same `-backend-config` flags as the pipeline), then in `infra/bootstrap`.
 
 ## Cost
 
-Pennies a month. Everything is billed per request and nothing runs while idle. Lambda, DynamoDB, CloudFront and Cognito all have always-free allowances that this stays well under, so the only real costs are API Gateway at about $1 per million requests and the auto-fill, which is about 1p per job ad on Sonnet 5.
+Pennies a month. Everything is billed per request and nothing runs while idle. Lambda, DynamoDB, CloudFront and Cognito all have always-free allowances that this stays well under, so the only real costs are API Gateway at about $1 per million requests and the auto-fill, which is about 0.5p per job ad on Haiku 4.5.
 
 ## What I'd add next
 

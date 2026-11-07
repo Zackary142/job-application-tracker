@@ -10,7 +10,8 @@ from pydantic import BaseModel, Field
 
 from app.models import WorkMode
 
-MODEL = os.environ.get("EXTRACT_MODEL", "anthropic.claude-sonnet-5")
+# haiku 4.5 - cheap and fine for this. haiku 5.5 isnt enabled on my bedrock account
+MODEL = os.environ.get("EXTRACT_MODEL", "anthropic.claude-haiku-4-5")
 
 SYSTEM = """You pull details out of job adverts for someone tracking their applications.
 Only use what the ad actually says. If something isn't in the ad, return null (or an empty
@@ -54,9 +55,7 @@ def extract_job_ad(text: str, client: AnthropicBedrockMantle | None = None) -> d
     try:
         response = client.messages.parse(
             model=MODEL,
-            max_tokens=8000,
-            # it's just pulling fields out, low effort is plenty and quicker
-            output_config={"effort": "low"},
+            max_tokens=2000,
             system=SYSTEM,
             messages=[
                 {
