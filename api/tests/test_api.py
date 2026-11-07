@@ -180,7 +180,7 @@ def test_extract_fills_fields(client, fake_ai):
     # the ad goes in the user message, wrapped in tags
     sent = fake.messages.calls[0]
     assert AD in sent["messages"][0]["content"]
-    assert sent["model"].startswith("anthropic.")
+    assert "anthropic.claude" in sent["model"]
 
 
 def test_extract_result_can_be_saved(client, fake_ai):

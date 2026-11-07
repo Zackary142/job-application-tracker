@@ -5,13 +5,15 @@ from datetime import date
 from functools import lru_cache
 
 import anthropic
-from anthropic import AnthropicBedrockMantle
+from anthropic import AnthropicBedrock
 from pydantic import BaseModel, Field
 
 from app.models import WorkMode
 
-# haiku 4.5 - cheap and fine for this. haiku 5.5 isnt enabled on my bedrock account
-MODEL = os.environ.get("EXTRACT_MODEL", "anthropic.claude-haiku-4-5")
+# haiku 4.5 - cheap and fine for this. haiku 5.5 isnt enabled on my bedrock account.
+# london doesnt host haiku 4.5 itself so this is the EU inference profile, which
+# routes to whichever EU region has capacity (data stays in the EU)
+MODEL = os.environ.get("EXTRACT_MODEL", "eu.anthropic.claude-haiku-4-5-20251001-v1:0")
 
 SYSTEM = """You pull details out of job adverts for someone tracking their applications.
 Only use what the ad actually says. If something isn't in the ad, return null (or an empty
@@ -44,13 +46,13 @@ class ExtractError(Exception):
 
 
 @lru_cache
-def get_client() -> AnthropicBedrockMantle:
+def get_client() -> AnthropicBedrock:
     # lambda gives us creds + AWS_REGION via env so nothing to pass in.
     # api gateway gives up at 30s so dont let retries go past that
-    return AnthropicBedrockMantle(timeout=25, max_retries=1)
+    return AnthropicBedrock(timeout=25, max_retries=1)
 
 
-def extract_job_ad(text: str, client: AnthropicBedrockMantle | None = None) -> dict:
+def extract_job_ad(text: str, client: AnthropicBedrock | None = None) -> dict:
     client = client or get_client()
     try:
         response = client.messages.parse(

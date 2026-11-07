@@ -29,10 +29,13 @@ data "aws_iam_policy_document" "api" {
     resources = ["${aws_cloudwatch_log_group.api.arn}:*"]
   }
   statement {
-    # bedrock-mantle is the endpoint the anthropic sdk uses. couldnt find an arn
-    # format documented for it so this is * for now
-    actions   = ["bedrock-mantle:CreateInference"]
-    resources = ["*"]
+    # just haiku 4.5. calls go through the EU inference profile, which can land
+    # on the model in any EU region, so both arns need a region wildcard
+    actions = ["bedrock:InvokeModel"]
+    resources = [
+      "arn:aws:bedrock:*:*:inference-profile/eu.anthropic.claude-haiku-4-5*",
+      "arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5*",
+    ]
   }
 }
 
