@@ -9,6 +9,7 @@ from mangum import Mangum
 from pydantic import BaseModel, Field
 
 from app.extract import ExtractError, extract_job_ad
+from app.fetch_page import PageError, fetch_page_text, looks_like_url
 from app.models import Application, ApplicationIn
 from app.repository import ApplicationRepository
 
@@ -98,8 +99,8 @@ def delete_application(app_id: str, repo: Repo, user_id: UserId) -> Response:
 
 
 class JobAdText(BaseModel):
-    # cap it so someone can't paste a novel in and run up the bill
-    text: str = Field(min_length=20, max_length=20000)
+    # the ad text, or a link to it. capped so someone can't paste a novel in
+    text: str = Field(min_length=12, max_length=20000)
 
 
 @app.post("/extract")
@@ -109,10 +110,22 @@ def extract(
     # user_id isnt used, its just here so you have to be logged in
     if not allowed:
         raise HTTPException(status_code=403, detail="Auto-fill isn't turned on for your account")
+    # pasted a link instead of the ad - go get the page
+    if looks_like_url(data.text):
+        try:
+            text = fetch_page_text(data.text)
+        except PageError as err:
+            raise HTTPException(status_code=422, detail=str(err)) from err
+        url = data.text.strip()
+    else:
+        text, url = data.text, None
     try:
-        return extract_job_ad(data.text)
+        fields = extract_job_ad(text)
     except ExtractError as err:
         raise HTTPException(status_code=502, detail=str(err)) from err
+    if url:
+        fields["url"] = url
+    return fields
 
 
 # lambda entrypoint

@@ -256,3 +256,39 @@ def test_autofill_group_from_token(groups, allowed):
     claims = {"sub": "abc"} if groups is None else {"sub": "abc", "cognito:groups": groups}
     event = {"requestContext": {"authorizer": {"jwt": {"claims": claims}}}}
     assert can_autofill(SimpleNamespace(scope={"aws.event": event})) is allowed
+
+
+# --- pasting a link instead of the ad ---
+
+JOB_URL = "https://jobs.example.com/cloud-engineer"
+
+
+def test_extract_from_link(client, fake_ai, monkeypatch):
+    fake = fake_ai(response=fake_response())
+    monkeypatch.setattr("app.main.fetch_page_text", lambda url: "page text " + AD)
+    res = client.post("/extract", json={"text": f"  {JOB_URL}\n"})
+    assert res.status_code == 200
+    assert res.json()["url"] == JOB_URL  # fills in the job url field too
+    assert "page text" in fake.messages.calls[0]["messages"][0]["content"]
+
+
+def test_extract_link_that_wont_open(client, fake_ai, monkeypatch):
+    from app.fetch_page import PageError
+
+    fake = fake_ai(response=fake_response())
+
+    def blocked(url):
+        raise PageError("Couldn't open that link")
+
+    monkeypatch.setattr("app.main.fetch_page_text", blocked)
+    res = client.post("/extract", json={"text": JOB_URL})
+    assert res.status_code == 422
+    assert fake.messages.calls == []  # didnt waste a model call
+
+
+def test_ad_text_with_a_link_inside_isnt_treated_as_a_link(client, fake_ai, monkeypatch):
+    fake_ai(response=fake_response())
+    monkeypatch.setattr("app.main.fetch_page_text", lambda url: pytest.fail("shouldnt fetch"))
+    res = client.post("/extract", json={"text": f"{AD} apply at {JOB_URL}"})
+    assert res.status_code == 200
+    assert "url" not in res.json()

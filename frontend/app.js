@@ -147,12 +147,12 @@ const autofillMsg = document.getElementById("autofill-msg");
 
 autofillBtn.addEventListener("click", async () => {
   const text = document.getElementById("ad-text").value.trim();
-  if (text.length < 20) {
-    autofillMsg.textContent = "Paste the job ad in first.";
+  if (text.length < 12) {
+    autofillMsg.textContent = "Paste the job ad or a link in first.";
     return;
   }
   autofillBtn.disabled = true;
-  autofillMsg.textContent = "Reading the ad...";
+  autofillMsg.textContent = text.startsWith("http") ? "Opening the link..." : "Reading the ad...";
   errorEl.textContent = "";
   try {
     const fields = await request("/extract", { method: "POST", body: JSON.stringify({ text }) });

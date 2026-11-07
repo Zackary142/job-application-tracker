@@ -48,8 +48,8 @@ class ExtractError(Exception):
 @lru_cache
 def get_client() -> AnthropicBedrock:
     # lambda gives us creds + AWS_REGION via env so nothing to pass in.
-    # api gateway gives up at 30s so dont let retries go past that
-    return AnthropicBedrock(timeout=25, max_retries=1)
+    # api gateway gives up at 30s, and fetching a link can take up to 8 of that
+    return AnthropicBedrock(timeout=18, max_retries=0)
 
 
 def extract_job_ad(text: str, client: AnthropicBedrock | None = None) -> dict:
